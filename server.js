@@ -1,42 +1,70 @@
 const express = require("express");
+const bodyParser = require("body-parser");
 const fs = require("fs");
-const path = require("path");
 const { exec } = require("child_process");
 
 const app = express();
-const PORT = 3000;
+const port = 3000;
 
-app.use(express.static("public"));
-app.use(express.json());
+app.use(bodyParser.text());
+app.use(express.static("public")); // Serves static files from 'public'
+
+// Arduino board config
+const cli = "arduino-cli";
+const fqbn = "esp32:esp32:esp32dev"; // Change if your board is different
+
+function getEsp32Port(callback) {
+  exec(`${cli} board list`, (err, stdout, stderr) => {
+    if (err) {
+      console.error("Error detecting board:", stderr);
+      return callback(null);
+    }
+    const lines = stdout.split("\n");
+    for (const line of lines) {
+      if (line.includes("esp32")) {
+        const match = line.match(/^([^\s]+)/);
+        if (match) return callback(match[1]);
+      }
+    }
+    callback(null);
+  });
+}
 
 app.post("/upload", (req, res) => {
-  const code = req.body.code;
-  const sketchDir = path.join(__dirname, "sketches", "user_code");
-  const inoPath = path.join(sketchDir, "user_code.ino");
+  const code = req.body;
 
-  fs.mkdirSync(sketchDir, { recursive: true });
-  fs.writeFileSync(inoPath, code);
+  if (!code) {
+    return res.status(400).send("No code provided");
+  }
 
-  const cli = path.join(__dirname, "bin", "arduino-cli");
-  const boardFQBN = "esp32:esp32:esp32";
-  const port = "/dev/ttyUSB0"; // Adjust if needed
+  const sketchPath = "./sketches/user_code/user_code.ino";
+  fs.mkdirSync("./sketches/user_code", { recursive: true });
+  fs.writeFileSync(sketchPath, code);
 
-  const compileCmd = `${cli} compile --fqbn ${boardFQBN} ${sketchDir}`;
-  const uploadCmd = `${cli} upload -p ${port} --fqbn ${boardFQBN} ${sketchDir}`;
-
-  exec(compileCmd, (err, stdout, stderr) => {
+  exec(`${cli} compile --fqbn ${fqbn} sketches/user_code`, (err, stdout, stderr) => {
     if (err) {
-      res.send("❌ Compilation failed:\n" + stderr);
-      return;
+      console.error("Compilation error:", stderr);
+      return res.status(500).send(`Compilation failed:\n${stderr}`);
     }
-    exec(uploadCmd, (err2, stdout2, stderr2) => {
-      if (err2) {
-        res.send("❌ Upload failed:\n" + stderr2);
-      } else {
-        res.send("✅ Upload successful:\n" + stdout2);
+
+    getEsp32Port((detectedPort) => {
+      if (!detectedPort) {
+        return res.status(500).send("ESP32 not detected");
       }
+
+      console.log(`Detected ESP32 on port ${detectedPort}`);
+      exec(`${cli} upload -p ${detectedPort} --fqbn ${fqbn} sketches/user_code`, (err2, stdout2, stderr2) => {
+        if (err2) {
+          console.error("Upload error:", stderr2);
+          return res.status(500).send(`Upload failed:\n${stderr2}`);
+        }
+
+        res.send("Upload successful!");
+      });
     });
   });
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.listen(port, () => {
+  console.log(`Server listening on http://localhost:${port}`);
+});
