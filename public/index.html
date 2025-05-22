@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ESP32 Web Serial</title>
+</head>
+<body>
+  <h2>ESP32 Web Serial Uploader</h2>
+  <button id="connect">Connect to ESP32</button>
+  <button id="send">Send Data</button>
+  <pre id="output"></pre>
+
+  <script>
+    let port, reader, writer;
+    const output = document.getElementById('output');
+
+    document.getElementById('connect').addEventListener('click', async () => {
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable.getReader();
+
+        const encoder = new TextEncoderStream();
+        encoder.readable.pipeTo(port.writable);
+        writer = encoder.writable.getWriter();
+
+        output.textContent += '✅ Connected to ESP32\n';
+
+        // Read incoming data
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          output.textContent += value;
+        }
+      } catch (err) {
+        output.textContent += '❌ Error: ' + err + '\n';
+      }
+    });
+
+    document.getElementById('send').addEventListener('click', () => {
+      if (writer) {
+        writer.write("Hello from Web Serial!\n");
+        output.textContent += "📤 Sent: Hello from Web Serial!\n";
+      } else {
+        output.textContent += "❗ Please connect first\n";
+      }
+    });
+  </script>
+</body>
+</html>
