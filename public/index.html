@@ -1,31 +1,87 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ESP32 Web Serial Uploader</title>
-  <script src="https://unpkg.com/monaco-editor@0.45.0/min/vs/loader.js"></script>
   <style>
-    #editor { height: 400px; border: 1px solid #ccc; margin-top: 10px; }
-    body { font-family: sans-serif; margin: 20px; }
+    body {
+      font-family: Arial, sans-serif;
+    }
+    #output {
+      white-space: pre-wrap;
+      margin-top: 10px;
+    }
+    #editor {
+      width: 100%;
+      height: 300px;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 <body>
   <h1>ESP32 Web Serial Uploader</h1>
 
-  <label for="baudrate">Baud Rate:</label>
-  <select id="baudrate">
-    <option>9600</option>
-    <option selected>115200</option>
-    <option>230400</option>
+  <label for="baud">Baud Rate:</label>
+  <select id="baud">
+    <option value="9600">9600</option>
+    <option value="115200" selected>115200</option>
   </select>
 
-  <button onclick="connectSerial()">Connect to ESP32</button>
-  <button onclick="sendData()">Send Data</button>
-  <button onclick="uploadCode()">Upload Code to ESP32</button>
+  <button id="connect">Connect to ESP32</button>
+  <button id="send">Send Data</button>
+  <button id="upload">Upload Code to ESP32</button>
 
   <div id="editor"></div>
 
-  <pre id="output"></pre>
+  <div id="output"></div>
 
-  <script src="script.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <script>
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      window.editor = monaco.editor.create(document.getElementById('editor'), {
+        value: [
+          'void setup() {',
+          '  Serial.begin(115200);',
+          '}',
+          '',
+          'void loop() {',
+          '  Serial.println("Hello ESP32");',
+          '  delay(1000);',
+          '}'
+        ].join('\n'),
+        language: 'cpp',
+        theme: 'vs-dark'
+      });
+    });
+  </script>
+
+  <script>
+    document.getElementById("upload").addEventListener("click", () => {
+      const code = editor.getValue();
+      if (!code.trim()) {
+        alert("Code is empty!");
+        return;
+      }
+
+      fetch("/upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain"
+        },
+        body: code
+      })
+        .then(res => res.text())
+        .then(data => {
+          const output = document.getElementById("output");
+          output.textContent = data;
+          output.style.color = data.includes("Upload successful") ? "green" : "red";
+        })
+        .catch(err => {
+          document.getElementById("output").textContent = `Error: ${err}`;
+        });
+    });
+  </script>
 </body>
 </html>
