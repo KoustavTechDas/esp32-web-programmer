@@ -1,54 +1,48 @@
 let port;
 let reader;
-let output = document.getElementById('output');
+let writer;
+let editor;
 
-// Load Monaco Editor
-require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.33.0/min/vs' }});
-require(['vs/editor/editor.main'], function () {
-  window.editor = monaco.editor.create(document.getElementById('editor'), {
-    value: `void setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n  Serial.println("Hello from ESP32!");\n  delay(1000);\n}`,
-    language: 'cpp',
-    theme: 'vs-dark',
-    automaticLayout: true
+require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.45.0/min/vs' } });
+require(["vs/editor/editor.main"], function () {
+  editor = monaco.editor.create(document.getElementById('editor'), {
+    value: `void setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n  Serial.println("Hello ESP32");\n  delay(1000);\n}`,
+    language: "cpp",
+    theme: "vs-dark"
   });
 });
 
-document.getElementById('connect').addEventListener('click', async () => {
-  try {
-    port = await navigator.serial.requestPort();
-    const baudRate = parseInt(document.getElementById('baudRate').value);
-    await port.open({ baudRate });
+async function connectSerial() {
+  port = await navigator.serial.requestPort();
+  await port.open({ baudRate: parseInt(document.getElementById('baudrate').value) });
+  reader = port.readable.getReader();
+  document.getElementById('output').textContent = "✔️ Connected to ESP32\n";
+  readLoop();
+}
 
-    // Read from serial
-    const decoder = new TextDecoderStream();
-    const inputDone = port.readable.pipeTo(decoder.writable);
-    reader = decoder.readable.getReader();
-
-    output.innerText += "✅ Connected to ESP32\n";
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      output.innerText += value;
-      output.scrollTop = output.scrollHeight;
-    }
-  } catch (err) {
-    output.innerText += `❌ Error: ${err.message}\n`;
+async function readLoop() {
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const text = new TextDecoder().decode(value);
+    document.getElementById('output').textContent += text;
   }
-});
+}
 
-document.getElementById('send').addEventListener('click', async () => {
-  if (!port || !port.writable) {
-    output.innerText += "⚠️ Not connected to ESP32\n";
-    return;
-  }
-
-  const code = window.editor.getValue();
-  const encoder = new TextEncoderStream();
-  const writableStreamClosed = encoder.readable.pipeTo(port.writable);
-  const writer = encoder.writable.getWriter();
-  await writer.write(code);
+async function sendData() {
+  writer = port.writable.getWriter();
+  const data = new TextEncoder().encode("Hello from browser!\n");
+  await writer.write(data);
   writer.releaseLock();
+}
 
-  output.innerText += "📤 Code sent to ESP32 (serial)\n";
-});
+async function uploadCode() {
+  const code = editor.getValue();
+  const res = await fetch("/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code })
+  });
+  const result = await res.text();
+  document.getElementById("output").textContent += `\n\n${result}\n`;
+}
