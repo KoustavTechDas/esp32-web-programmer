@@ -5,7 +5,7 @@ let writer;
 document.getElementById('connect-btn').addEventListener('click', async () => {
   try {
     port = await navigator.serial.requestPort(); // request user to pick port
-    await port.open({ baudRate: 115200 });
+    await port.open({ baudRate: 9600 });
 
     const decoder = new TextDecoderStream();
     port.readable.pipeTo(decoder.writable);
